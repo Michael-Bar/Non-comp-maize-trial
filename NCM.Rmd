@@ -1,0 +1,766 @@
+---
+title: 'Non-compulsory maize trial '
+author: '[Michael Barber](mailto:mike.barber@oneacrefund.org)'
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output:
+  html_document:
+    code_folding: hide
+    number_sections: yes
+    theme: paper
+    toc: yes
+    toc_depth: 6
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '6'
+subtitle: Summary analysis of non-compulsory maize RCT, Kenya LR2017
+---
+
+```{r setup, include=FALSE}
+#### set up
+## clear environment and console
+rm(list = ls())
+cat("\014")
+
+
+
+
+##getAnywhere(print.summary.lm)
+
+## set up some global options
+# define all knitr tables to be html format
+options(knitr.table.format = 'html')
+
+# change code chunk default to not show warnings or messages
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+## load libraries
+# dplyr and tibble are for working with tables
+# reshape is for easy table transformation
+# knitr is to make pretty tables at the end
+# ggplot2 is for making graphs
+# readxl is for reading in Excel files
+library(plyr, quietly = T)  #data manipulation
+library(dplyr, quietly = T, warn.conflicts = F, verbose = F)
+library(reshape2, quietly = T)
+library(sp, quietly = T)
+library(MASS, quietly = T)
+library(knitr, quietly = T)
+library(ggplot2, quietly = T)
+library(stargazer)
+library(cowplot)
+#library(boot)
+library(tibble, quietly = T)
+library(readxl, quietly = T)
+library(FSA, quietly=T)
+library(sfsmisc)
+library(pwr)
+library(robustbase)
+library(stats)
+
+library(lattice, quietly = T)
+library(broom, quietly = T) #clean regression outputes
+library(car)
+
+library(forcats, quietly = T) #data manipulation
+library(plotly, quietly = T) #interactive plots
+library(readr, quietly = T) #faster FI
+
+
+
+#### define helpful functions
+# define function that turns decimal percentages into pretty formats
+format_pct <- function(num) {round(num*100, digits = 2)}
+
+#calc SEM of list
+sems <- function(x) {sqrt(var(x)/length(x)) }
+
+
+#calc non-parametric power using Monte Carlo methods
+#Below based on code from Dr. Loladze http://elifesciences.org/content/3/e02245 
+power = function(sample1, sample2, reps=500, size=10) {
+    results  <- sapply(1:reps, function(r) {
+        resample1 <- sample(sample1, size=size, replace=TRUE) 
+        resample2 <- sample(sample2, size=size, replace=TRUE) 
+        test <- wilcox.test(resample1, resample2, paired=FALSE, correct=TRUE, exact=FALSE)
+        test$p.value
+    })
+    sum(results<0.05)/reps
+}
+
+
+#calc Cohen's D
+cohen_d <- function(m1,m2,s1,s2){  
+  spo <- sqrt((s1**2 + s2**2)/2)
+  d <- (m1 - m2)/spo
+  effsi <- d / sqrt((d**2)+4)
+  ret <- list("d" = d, "effectsi" = effsi)
+  return(ret) }
+  
+#given two list, find members NOT in BOTH  
+excluded <- function(l1,l2){
+  exc <- c()
+  exc <- setdiff(l1,l2)
+  exc <- c(exc, setdiff(l2,l1))
+  exc <- unique(exc)
+  return(exc)
+}
+
+
+
+
+
+
+summ.lm <- function (x, digits = max(3L, getOption("digits") - 3L), symbolic.cor = x$symbolic.cor, 
+    signif.stars = getOption("show.signif.stars"), ...) 
+{
+    cat("\nCall:\n", paste(deparse(x$call), sep = "\n", collapse = "\n"), 
+        "\n\n", sep = "")
+    resid <- x$residuals
+    df <- x$df
+    rdf <- df[2L]
+    cat(if (!is.null(x$weights) && diff(range(x$weights))) 
+        "Weighted ", "Residuals:\n", sep = "")
+    if (rdf > 5L) {
+        nam <- c("Min", "1Q", "Median", "3Q", "Max")
+        rq <- if (length(dim(resid)) == 2L) 
+            structure(apply(t(resid), 1L, quantile), dimnames = list(nam, 
+                dimnames(resid)[[2L]]))
+        else {
+            zz <- zapsmall(quantile(resid), digits + 1L)
+            structure(zz, names = nam)
+        }
+        print(rq, digits = digits, ...)
+    }
+    else if (rdf > 0L) {
+        print(resid, digits = digits, ...)
+    }
+    else {
+        cat("ALL", df[1L], "residuals are 0: no residual degrees of freedom!")
+        cat("\n")
+    }
+    if (length(x$aliased) == 0L) {
+        cat("\nNo Coefficients\n")
+    }
+    else {
+        if (nsingular <- df[3L] - df[1L]) 
+            cat("\nCoefficients: (", nsingular, " not defined because of singularities)\n", 
+                sep = "")
+        else cat("\nCoefficients:\n")
+        coefs <- x$coefficients
+        if (!is.null(aliased <- x$aliased) && any(aliased)) {
+            cn <- names(aliased)
+            coefs <- matrix(NA, length(aliased), 4, dimnames = list(cn, 
+                colnames(coefs)))
+            coefs[!aliased, ] <- x$coefficients
+        }
+        printCoefmat(coefs, digits = digits, signif.stars = signif.stars, 
+            na.print = "NA", ...)
+    }
+    cat("\nResidual standard error:", format(signif(x$sigma, 
+        digits)), "on", rdf, "degrees of freedom")
+    cat("\n")
+    if (nzchar(mess <- naprint(x$na.action))) 
+        cat("  (", mess, ")\n", sep = "")
+    if (!is.null(x$fstatistic)) {
+        cat("Multiple R-squared: ", formatC(x$r.squared, digits = digits))
+        cat(",\tAdjusted R-squared: ", formatC(x$adj.r.squared, 
+            digits = digits), "\nF-statistic:", formatC(x$fstatistic[1L], 
+            digits = digits), "on", x$fstatistic[2L], "and", 
+            x$fstatistic[3L], "DF,  p-value:", format.pval(pf(x$fstatistic[1L], 
+                x$fstatistic[2L], x$fstatistic[3L], lower.tail = FALSE), 
+                digits = digits))
+        cat("\n")
+    }
+    correl <- x$correlation
+    if (!is.null(correl)) {
+        p <- NCOL(correl)
+        if (p > 1L) {
+            cat("\nCorrelation of Coefficients:\n")
+            if (is.logical(symbolic.cor) && symbolic.cor) {
+                print(symnum(correl, abbr.colnames = NULL))
+            }
+            else {
+                correl <- format(round(correl, 2), nsmall = 2, 
+                  digits = digits)
+                correl[!lower.tri(correl)] <- ""
+                print(correl[-1, -p, drop = FALSE], quote = FALSE)
+            }
+        }
+    }
+    cat("\n")
+    invisible(x)
+}
+
+#pretty plots on same page
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+
+
+
+#### load data
+# seasons clients 2017, master version, as of 22 Feb 17
+#read in a few lines to get good col names
+titles <- read.csv("Season Clients Master_20170222-122327.csv", nrows = 100)
+#read in actual data with the faster read_csv 
+supdat <- read_csv("Season Clients Master_20170222-122327.csv", trim_ws = TRUE)
+colnames(supdat) <- colnames(titles)
+storedat <- supdat
+
+##colnames(supdat)
+# household count data by village / site, from kenley jones
+#pop <- read_excel(paste(dd, "Village Household Survey Results.xlsx", sep = "/"),
+#    sheet="Village List")
+
+# site designations (T vs C)
+TC <- read_csv("Non-Compulsory Maize Trial - Treatments by Site.csv" , trim_ws = TRUE, skip=3)
+##supdat$Site
+#begin dropping
+supdat <- subset(supdat, DistrictName != "KENYA STAFF")
+
+#start cleaning and prepping data for analysis
+
+supdat$semi.name <- paste(supdat$DistrictName, supdat$SiteName,sep = "-")
+TC$semi.name <- paste(TC$District,TC$Site, sep="-")
+TC.C <- subset(TC, Treatment == "C" )
+TC.T <- subset(TC, Treatment == "T" )
+
+#slim down data to just the sites we care about by T and C
+Cdata <- subset(supdat, semi.name %in% TC.C$semi.name)
+Tdata <- subset(supdat, semi.name %in% TC.T$semi.name)
+#manually inspect colnames to match to features of interest:
+#NB for both new and ret clients
+#recode all maize choices as 1 and no choice as 0
+
+Cdata$maize.adoption <- Cdata$X2017..Long.Rain_Maize.Maize.Seed.choice
+Tdata$maize.adoption <- Tdata$X2017..Long.Rain_Maize.Maize.Seed.choice
+
+Cdata$maize.adoption[is.na(Cdata$maize.adoption)] <- as.numeric(0.0)
+Cdata$maize.adoption<- as.numeric(Cdata$maize.adoption )
+Cdata$maize.adoption[is.na(Cdata$maize.adoption)] <- as.numeric(1.0)
+
+Tdata$maize.adoption[is.na(Tdata$maize.adoption)] <- as.numeric(0.0)
+Tdata$maize.adoption <- as.numeric(Tdata$maize.adoption)
+Tdata$maize.adoption[is.na(Tdata$maize.adoption)] <- as.numeric(1.0)
+
+#solar #sunking only??
+Cdata$solar <- Cdata$X2017..Long.Rain_Sun.King.Home.qty+ Cdata$X2017..Long.Rain_Sun.King.Mobile.qty+ Cdata$X2017..Long.Rain_Sun.King.Pro.II.qty + Cdata$X2017..Long.Rain_Sun.King.Solo.qty
+Tdata$solar <-Tdata$X2017..Long.Rain_Sun.King.Home.qty+ Tdata$X2017..Long.Rain_Sun.King.Mobile.qty+ Tdata$X2017..Long.Rain_Sun.King.Pro.II.qty + Tdata$X2017..Long.Rain_Sun.King.Solo.qty
+
+
+Cdata$TC <- 0
+Tdata$TC <- 1
+supdat <- rbind(Cdata,Tdata)
+
+#newmember
+supdat$NewMember[supdat$NewMember == "False"] <- 0
+supdat$NewMember[supdat$NewMember == "True"] <- 1
+supdat$NewMember <- as.numeric(supdat$NewMember)
+#adoption = binary
+#beans
+supdat$beans <- supdat$X2017..Long.Rain_New.Bean.Variety_Credit + supdat$X2017..Long.Rain_Bean.Intercrop_Credit
+supdat$beans[supdat$beans >0] <- 1
+
+
+ #data at individ level
+#rejoin dataframe with new flag
+
+indidat <-supdat
+indidat$TC[indidat$TC == 0] <- "Control"
+indidat$TC[indidat$TC == 1] <- "Treated"
+supdat$TC <- as.numeric(supdat$TC)
+
+# #merge groups into unique sites
+siteTC <- supdat %>% group_by(semi.name) %>% summarise_each(funs(mean))
+supdat <- siteTC # data at site level
+#recode treat control into strings
+supdat$TC[supdat$TC == 0] <- "Control"
+supdat$TC[supdat$TC == 1] <- "Treated"
+
+#add district back in. This is a rather wierd way to do this, admittedly. 
+x<-  data.frame(do.call('rbind', strsplit(as.character(supdat$semi.name),'-',fixed=TRUE)))
+supdat$District <- x$X1
+head(supdat[c("District","semi.name")],n=50)
+#final check
+table(supdat$TC)
+
+
+```
+
+#Summary
+##Overview
+
+The Non-Compulsory Maize Trial was run during enrollment for the 2017 core program in Kenya. The trial aimed to determine the effects of One Acre Fund’s shift in policy to make maize an optional rather than compulsory product for clients, a change that was first implemented in the 2016 season. We are primarily interested in the effects of this policy change on program enrollment, maize adoption, and overall impact. In this trial, the treatment group had to purchase at least a 1/4 acre of maize in order to enroll in the program. 
+
+You can find the full document set [here]( https://drive.google.com/open?id=0B3_WyX1D8qwMNTk0VFhoRk5SYlE "Link")
+
+
+
+
+```{r, hold, include=FALSE}
+##PI main hypotheses
+# 
+# •	H1	Making the maize product compulsory will result in higher maize adoption (measured both as average maize acres per farmer and the percent of farmers who chose to purchase any maize)
+# 
+# •	H2	Making the maize product compulsory will result in lower program enrollment (measured both as average clients per site and the percent of total households in a site that join One Acre Fund)
+# 
+# •	H3	Making the maize product compulsory will result in higher transaction size (measured as the average client loan size)
+# 
+# •	H4	Making the maize product compulsory will result in higher program impact (measured as an average of what each client purchased multiplied by the impact of those products)
+# 
+# ##PI features of interest
+# •	Average Acres of Maize Purchased (both overall and broken out by new and returning clients)
+# 
+# •	Average Percent of 1AF Clients Adopting Maize (both overall and broken out by new and returning clients)
+# 
+# •	Average Clients/Site (both overall and broken out by new and returning clients)
+# 
+# •	Average 1AF Client Density (% total households joining 1AF)
+# 
+# •	Average Transaction Size (both overall and broken out by new and returning clients)
+# 
+# •	Average Program Impact (both overall and broken out by new and returning clients)
+# 
+# •	Average Adoption Rates of Key Products (solar lights, cookstoves, beans)
+# 
+
+
+```
+## Main takeaways
+
+•	For all hypotheses tested, no signficant relationships were observed between treatment and response.  
+
+•	All hypotheses, except maize adoption, were significantly underpowered. Ideal power is 0.8, most hypotheses failed to reach 0.4 power when non-normal responses are taken into account. The impact of low-power is three fold:
+
+• 1) There is a lower chance that a true effect can actually be detected
+
+• 2) There is a higher risk that a detected effect is false. Statistical power and p-values combine to form the positive predictive value (PPV), which is the probability that a detected effect represents a true effect. For example, of our 5 observations (maize adoption etc) let us assume only 1 is actually true (i.e. truly different between treated and control = 1 / (5 − 1) = 0.25), if our studies have 20% power (0.2), then PPV = 0.20 × 0.25 / (0.20 × 0.25 + 0.05) =  0.50. I.e. only one half of our claimed discoveries would actually be true. 
+
+• 3) the estimate of the effect of treatment is likely to be over exaggerated (this is known as the [Winner's curse](https://blogs.ncl.ac.uk/dennislendrem/2015/12/20/power-sample-size-and-the-winners-curse/ "Link") )
+
+###Poor statistical power was preventable, to give a worked example:
+Control group bean adoption was ~ `r round(100*mean(subset(supdat,TC=="Control")$beans),0)` % (this was known pre-trial). Percentages pushing at the 0 or 100 bounds are very often non-normal (as is the case here, see histograms below). Hence, a non-parametric statistical power calculation would need to be performed (essentially a Monte Carlo method of calculating power against a simulated data set to find the proportion of observations that result in a p value of <0.05).
+```{r, sim power , include=FALSE}
+t <- "beans"
+fakedat <- subset(supdat,TC=="Control")[[t]]
+xi<-0.0175
+for( i in 1:length(fakedat)){
+  if(fakedat[i]<(1-xi)){
+    fakedat[i] = fakedat[i] +xi
+  } }
+tp <- power( subset(supdat,TC=="Control")[[t]] , fakedat , reps=100, size= length(subset(supdat, TC=="Control")[[t]] ))
+inp <- cohen_d(mean(subset(supdat,TC=="Control")[[t]]),mean(fakedat),sd(subset(supdat,TC=="Control")[[t]]),sd(fakedat))
+pt <- pwr.2p.test(h = inp$effectsi , n = length(subset(supdat,TC=="Control")[[t]]), sig.level = 0.05, power = NULL)
+
+```
+
+Such a simulation suggests a 25% increase in bean adoption would only yield a power of `r round(pt$power,3)` for normally distributed data and `r round(tp,3)` for non-normal data. Going forward, I have provided a short R script for the easy calculation of statistical powers under normal and non-normal regimes ([here](  https://drive.google.com/open?id=0B3_WyX1D8qwMYVI1MnlBYlNCQ1k  "Link")).
+
+# Data analysis
+##Data preparation
+Adoption data was binarized from either product credit or quantity columns in [Season Clients master](https://drive.google.com/open?id=0B3_WyX1D8qwMOXNBclh6TkV1bmc "dataset"). Farmers were then summarised into groups, leading the binarized outcome to become a fraction between 0 and 1. Site names were matched to the treatment/control list provided in [treatment lists](https://drive.google.com/a/oneacrefund.org/file/d/0B3_WyX1D8qwMOEZKbDRhNmt5ck0/view?usp=sharing "Treatment and control lists").
+
+
+
+##Testing the main hypotheses
+For an RCT trial we can directly compare treatment and control groups to pull out statistical relationships. As a first pass let's look at some of the differences between treatment and control groups as a whole, including statistical tests in our outputs.
+
+
+```{r, inspect data}
+#plot some histos around key observables
+# ggplot(NULL, aes(x=X2017..Long.Rain_Maize.acres)) + geom_density(data=Cdata , bw=0.1, colour='blue')  + geom_density(data=Tdata , bw=0.1, colour='red')  + xlab("LR2017 maize acres") + geom_text(data=Tdata,x=0.1, y=1.7, label="Control",colour='blue') + geom_text(data=Tdata,x=0.1, y=1.6, label="Treatment" , colour='red')
+
+
+h1 <- ggplot(supdat, aes(x=X2017..Long.Rain_Maize.acres,color=TC)) + geom_density(bw=0.05) +ggtitle("acres of maize")
+h2 <- ggplot(supdat, aes(x=maize.adoption,color=TC)) + geom_density(bw=0.1) +ggtitle("maize adoption") 
+h3 <- ggplot(supdat, aes(x=beans,color=TC)) + geom_density(bw=0.05)  +ggtitle("bean adoption")
+h4 <- ggplot(supdat, aes(x=solar,color=TC)) + geom_density(bw=0.05)  +ggtitle("solar adoption")
+h5 <- ggplot(supdat, aes(x=X2017..Long.Rain_Envirofit.Cookstove.qty,color=TC)) + geom_density(bw=0.05) +ggtitle("cookstove adoption")
+h6 <- ggplot(supdat, aes(x=TotalCredit,color=TC)) + geom_density(bw=300) +ggtitle("Total credit")
+
+#qq=qqnorm(supdat$TotalCredit, plot.it=FALSE)
+multiplot(h1,h2,h3,h4,h5,h6,  cols=2)
+
+qq=qqnorm(supdat$TotalCredit, plot.it=FALSE)
+
+  
+    
+#qqnorm(supdat$X2017..Long.Rain_Maize.acres)
+#qqline(supdat$X2017..Long.Rain_Maize.acres)
+
+#ggplot(supdat, aes(x=X2017..Long.Rain_Maize.acres,color=TC)) + geom_histogram(fill="white",alpha=0.2)
+
+```
+
+At a site level, we can see that few of the distributions look normal (perhaps the exception of total credit, with a QQplot R2 of `r round(cor(qq$x,qq$y),3) `). This lack of normality means we will need to perform non-parametric testing between control and treatment to identify significant differences. The non-parametric test employed here is the Mann-Whitney U test (aka. Wilcoxon ranked sum). Such a test on maize acreage gives an output like the following:
+
+```{r, Wil-maize, echo= FALSE }
+#maize acres indiv
+#wilcox.test(Cdata$X2017..Long.Rain_Maize.acres, Tdata$X2017..Long.Rain_Maize.acres ,paired=FALSE, correct=TRUE)
+#maize site
+wilcox.test(subset(supdat, TC=="Control")$X2017..Long.Rain_Maize.acres, subset(supdat, TC=="Treated")$X2017..Long.Rain_Maize.acres ,paired=FALSE, correct=TRUE)
+
+```
+
+This test gives a p-value of `r round(wilcox.test(subset(supdat, TC=="Control")$X2017..Long.Rain_Maize.acres, subset(supdat, TC=="Treated")$X2017..Long.Rain_Maize.acres ,paired=FALSE, correct=TRUE)$p.value,2)`, suggesting there are no significant differences between treatment and control farmers in maize acreage. Let's look at some simple hypothesis testing and descriptive statistics for the other key hypothesis before we do a deeper dive:
+
+
+```{r, Wil-bars, echo= FALSE }
+#new stats power
+
+#plot with bootstrapped error bars i.e. nonparametric
+#need non normal power calcs too - use a bootstrap method
+#note, wilcoxon test AKA Mann-Whitney U test is for non-para testing
+
+t <- "maize.adoption"
+tp <- power( subset(supdat,TC=="Control")[[t]] , subset(supdat,TC=="Treated")[[t]] , reps=1000, size= length(subset(supdat, TC=="Control")[[t]] ))
+
+# t.test(subset(supdat,TC=="Control")[[t]],subset(supdat,TC=="Treated")[[t]], paired=FALSE, var.equal=FALSE)
+# effsi <- cohen_d(mean(subset(supdat,TC=="Control")[[t]]), mean(subset(supdat,TC=="Treated")[[t]]), sd(subset(supdat,TC=="Control")[[t]]), sd(subset(supdat,TC=="Treated")[[t]]))
+# effsi$effectsi
+# pwr.2p.test(h=effsi$effectsi, n= length(subset(supdat,TC=="Treated")[[t]]), sig.level = 0.05)
+
+
+g1 <- ggplot(supdat, aes(TC, maize.adoption)) +  stat_summary(fun.y = mean, geom = "bar") +  stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width=0.25)  + ggtitle("Maize adoption")  
+g1 <- add_sub(g1, paste("stat power ~ ",round(tp,3),"\n","Wilcoxon P-value:",round(wilcox.test(subset(supdat, TC=="Control")[[t]], subset(supdat, TC=="Treated")[[t]]  ,paired=FALSE, correct=TRUE)$p.value,3) ))
+
+
+#same for beans
+t <- "beans" 
+tp <- power( subset(supdat,TC=="Treated")[[t]] , subset(supdat,TC=="Control")[[t]] , reps=1000, size= length(subset(supdat, TC=="Control")[[t]] ))
+
+g2 <- ggplot(supdat, aes(TC,beans)) + stat_summary(fun.y = mean, geom = "bar") + stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width=0.25) + ggtitle("Bean adoption")  
+g2 <- add_sub(g2, paste("stat power ~ ",round(tp,3),"\n","Wilcoxon P-value:",round(wilcox.test(subset(supdat, TC=="Control")[[t]], subset(supdat, TC=="Treated")[[t]]  ,paired=FALSE, correct=TRUE)$p.value,3) ))
+
+
+#same for cookstoves
+t <- "X2017..Long.Rain_Envirofit.Cookstove.qty" 
+tp <- power( subset(supdat,TC=="Treated")[[t]] , subset(supdat,TC=="Control")[[t]] , reps=1000, size= length(subset(supdat, TC=="Control")[[t]] ))
+
+g3 <- ggplot(supdat, aes(TC, X2017..Long.Rain_Envirofit.Cookstove.qty)) + stat_summary(fun.y = mean, geom = "bar") + stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width=0.25) + ggtitle("Cookstove adoption") + ylab("Cookstove") 
+g3 <- add_sub(g3, paste("stat power ~ ",round(tp,3),"\n","Wilcoxon P-value:",round(wilcox.test(subset(supdat, TC=="Control")[[t]], subset(supdat, TC=="Treated")[[t]]  ,paired=FALSE, correct=TRUE)$p.value,3) ))
+
+#same for solar
+t <- "solar" 
+tp <- power( subset(supdat,TC=="Treated")[[t]] , subset(supdat,TC=="Control")[[t]] , reps=1000, size= length(subset(supdat, TC=="Control")[[t]] ))
+
+g4 <- ggplot(supdat, aes(TC, solar)) + stat_summary(fun.y = mean, geom = "bar") + stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width=0.25)  + ggtitle("Solar adoption") 
+
+g4 <- add_sub(g4, paste("stat power ~ ",round(tp,3),"\n","Wilcoxon P-value:",round(wilcox.test(subset(supdat, TC=="Control")[[t]], subset(supdat, TC=="Treated")[[t]]  ,paired=FALSE, correct=TRUE)$p.value,3) ))
+
+
+#loan size
+t <- "TotalCredit"
+#normal data
+inp <- cohen_d(mean(subset(supdat,TC=="Control")[[t]]),mean(subset(supdat,TC=="Treated")[[t]]),sd(subset(supdat,TC=="Control")[[t]]),sd(subset(supdat,TC=="Treated")[[t]]))
+tp <- pwr.2p.test(h = inp$effectsi , n = length(subset(supdat,TC=="Control")[[t]]), sig.level = 0.05, power = NULL)$power
+
+g5 <- ggplot(supdat, aes(TC, TotalCredit)) + stat_summary(fun.y = mean, geom = "bar") + stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width=0.25) + ggtitle(t) 
+#g5 <- g5 + geom_text(aes(x=1,y=1.2*mean(supdat[[t]])) , label=(paste("stat power ~ ",round(tp,3) )))
+g5 <- add_sub(g5, paste("stat power ~ ",round(tp,3),"\n","Wilcoxon P-value:",round(wilcox.test(subset(supdat, TC=="Control")[[t]], subset(supdat, TC=="Treated")[[t]]  ,paired=FALSE, correct=TRUE)$p.value,3) ))
+
+#clients per site
+#loop over and get numbers per site (important for error calcs)
+
+C.site.num <-c(NULL)
+T.site.num <- c(NULL)
+for(i in unique(Cdata$SiteName)){
+  da <- subset(Cdata, SiteName==i)
+  len <- length(unique(da$GlobalClientID))
+  C.site.num <- c(C.site.num, len) }
+for(i in unique(Tdata$SiteName)){
+  da <- subset(Tdata, SiteName==i)
+  len <- length(unique(da$GlobalClientID))
+  T.site.num <- c(T.site.num, len) }
+#convert to df and bind
+temp <- data.frame("Nsites" = C.site.num , TC = "Control")
+temp2 <- data.frame("Nsites" = T.site.num , TC = "Treated")
+temp <- rbind(temp, temp2)
+
+t <- "Nsites"
+tp <- power( subset(temp,TC=="Treated")[[t]] , subset(temp,TC=="Control")[[t]] , reps=1000, size= length(subset(temp, TC=="Control")[[t]] ))
+g6 <- ggplot(temp, aes(TC, Nsites)) + stat_summary(fun.y = mean, geom = "bar") + stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width=0.25) + ggtitle("Average clients per site")
+g6 <- add_sub(g6, paste("stat power ~ ",round(tp,3),"\n","Wilcoxon P-value:",round(wilcox.test(subset(temp, TC=="Control")[[t]], subset(temp, TC=="Treated")[[t]]  ,paired=FALSE, correct=TRUE)$p.value,3) ))
+
+
+plot_grid(g1,g2 , ncol = 2, nrow = 1)
+plot_grid(g3,g4 , ncol = 2, nrow = 1)
+plot_grid(g5,g6 , ncol = 2, nrow = 1)
+
+
+
+
+```
+
+Once again, note that all but one of the main hypotheses are significantly underpowed (ideal power is ~0.8). This means that even if treatment were effecting the above measurables, we would be unable to detect it. The only significant difference observed was in maize adoption, however, regression analysis suggests that this is due to non-identical treatment/control sites rather than a genuine impact (see below).
+
+
+
+
+# Regression analysis
+To deconvolute various factors we can run a regression analysis. This will allow us to examine, for example, the effect of treatment when other factors are taken into account (district level effects, average enrolled seasons etc.). Note that we are here using average total enrolled seasons as a more accurate proxy for new client binary responses, this will allow us to calculate the effect of every additional season on responses. 
+ 
+##Simple regression results
+Let us first examine the plots from a simple linear regression on maize acreage:
+
+```{r, maize_acre breakdown}
+
+acre.fit <-lm(formula = X2017..Long.Rain_Maize.acres ~ TotalEnrolledSeasons + TC + District, data=supdat)
+#summary(acre.fit)$adj.r.squared
+par(mfrow = c(2, 2))
+plot(acre.fit)
+
+
+```
+
+We can see from these plots that a standard linear regression is unlikely to be accurate due to the presence of outliers (note the outlier points on the normal QQ plot). We can therefore run a robust regression to better estimate regression coefficients. A robust regression will give less weight to the outlying points, reducing their impact on our results:
+
+
+
+```{r, lms]}
+acre.rob <-lmrob(formula = X2017..Long.Rain_Maize.acres ~ TC + District + TotalEnrolledSeasons, data=supdat)
+#acre.rlm <-rlm(formula = X2017..Long.Rain_Maize.acres ~ TC + District + TotalEnrolledSeasons, data=supdat)
+
+#summary(acre.rob)$adj.r.squared
+par(mfrow = c(2, 2))
+plot(acre.rob, which=c(1:4))
+#qqnorm(stdres(acre.rob))
+#qqline(stdres(acre.rob))
+
+stargazer(acre.rob, type = "text")
+
+# #rejig
+# #use boxcox to find decent transformation
+# supdat$newy <- supdat$X2017..Long.Rain_Maize.acres+0.000001 # offset all by minute to rid of zeros
+# bc <- boxcox(newy ~ TotalEnrolledSeasons + TC + District, data=supdat)
+# trans <- bc$x[which.max(bc$y)]
+# trans
+# #almost 0.5, so lets use a sqrt
+# #original trans
+# acre.p <-glm(formula = newy ~ TotalEnrolledSeasons + TC + Facilitator +SiteName + DistrictName, data=supdat, family=poisson(link="sqrt"))
+# #newtrans
+# sup <- supdat
+# sup$Totalsea <- supdat$TotalEnrolledSeasons**(-2/3)
+# acre.g <-glm(formula = newy ~ Totalsea + TC + Facilitator +SiteName + DistrictName, data=sup)
+# 
+# 
+# qqnorm(stdres(acre.g)) 
+# qqnorm(stdres(acre.p))
+# qqline(stdres(acre.g))
+# 
+# plot(acre.p)
+# #summary(acre.p)$deviance
+# tidy(acre.p)[1:7,]
+
+```
+ 
+The robust regression for maize acreage fails to find any significant relationship between treatment and acreage. However, we do find a sigificant relationship between new and returning clients (expressed as total enrolled seasons). Every additional season enrolled increases the acreage devoted to maize by 0.06. 
+
+We can likewise run robust regression on the remaining observables (see plots in appendix).
+
+```{r, beanreg}
+
+supdat <- Filter(function(x)!all(is.na(x)), supdat)
+##
+
+#non normal
+acre.bean <-lmrob(formula = beans ~ TotalEnrolledSeasons + TC + District, data=supdat)
+stargazer(acre.bean, type = "text")
+```
+
+Observing bean adoption, neither number of enrolled seasons or treatment are significant. 
+```{r, stovereg}
+##
+#non normal
+#sqrt X2017..Long.Rain_Envirofit.Cookstove.qty
+supdat$stove.sqrt <- sqrt(supdat$X2017..Long.Rain_Envirofit.Cookstove.qty)
+acre.stove <-lmrob(formula = stove.sqrt  ~ TotalEnrolledSeasons + TC + District, data=supdat)
+stargazer(acre.stove, type = "text")
+```
+
+We transform the cookstove data to it's square root to acheive normally distributed residuals. Once again we find that treatment has no detectable effect, however total enrolled seasons is significant at the 0.01 p-level. 
+
+```{r, solarreg}
+##
+acre.solar <-lmrob(formula = solar ~ TotalEnrolledSeasons + TC + District, data=supdat)
+stargazer(acre.solar, type = "text")
+```
+
+Solar adoption is also not significantly (p<0.05) correlated with treatment or total enrolled seasons. Note that we will not accept a 0.1 p-value as significant due to the [multiple comparison problem]( https://en.wikipedia.org/wiki/Multiple_comparisons_problem "wiki link").
+
+Maize adoption is skewed heavily toward 100% adoption, for this reason we will employ a logit transformation of the response variable to ensure normally distributed residuals (see appendix for untransformed maize adoption regression):
+
+```{r, maizreg}
+#trans data to make residuals normalish
+supdat$logitmaize.adoption <- logit(supdat$maize.adoption, percents=FALSE, adjust = -0.05)
+acre.maizchoice <-lmrob(formula = logitmaize.adoption ~ TC + TotalEnrolledSeasons + District, data=supdat)
+acre.maiz <-lmrob(formula = logitmaize.adoption ~ TC, data=supdat)
+
+qp=qqnorm(stdres(acre.maizchoice), plot.it=FALSE)
+x <- cor(qp$x,qp$y)
+#mean(subset(supdat, TC=="Control")$TotalEnrolledSeasons)
+#mean(subset(supdat, TC=="Treated")$TotalEnrolledSeasons)
+
+
+
+par(mfrow = c(2, 2))
+plot(acre.maizchoice, which=c(1:4))
+
+#paste("R2:",cor(qp$x,qp$y))
+
+# b <- c(-0.2,-0.1,-0.05,-0.01,0.01,0.05,0.1,0.2)
+# 
+# for(i in b){
+#   supdat$testy <- logit(supdat$maize.adoption, percents=FALSE, adjust = i)
+# 
+#   xi <- c()
+#   acre.maizchoice <-lmrob(formula = testy ~ TC + TotalEnrolledSeasons + District, data=supdat)
+#   qp=qqnorm(stdres(acre.maizchoice), plot.it=FALSE)
+#   print(paste(i,"R2:",cor(qp$x,qp$y)))
+# 
+# }
+
+  
+```
+
+This transformation yields normal looking residuals with an R2 against a normal distribution of `r round(x,3)`.
+
+We can now examine the regression output:
+
+```{r, maizout}
+stargazer(acre.maizchoice, type = "text")
+x<- round(wilcox.test(subset(supdat, TC=="Control")$TotalEnrolledSeasons, subset(supdat, TC=="Treated")$TotalEnrolledSeasons ,paired=FALSE, correct=TRUE)$p.value,3)
+
+```
+
+Whilst our simple analysis identified treatment as significantly correlated with, when we correct for other factors this significance disappears (see appendix for a robust regression of maize adoption against only TC). However total enrolled seasons is clearly significant. This suggests that the difference in maize adoption between treatment and control sites was not due to treatment, but other factors. This nullifies our only significant finding from this analysis. 
+
+```{r, creditreg}
+##
+acre.cred <-lmrob(formula = TotalCredit ~ TotalEnrolledSeasons + TC + District, data=supdat)
+stargazer(acre.cred, type = "text")
+
+
+#We can further break this down by new or returning member; `r round(mean(subset(Cdata, NewMember=="True")$X2017..Long.Rain_Maize.acres),2)` and  `r round(mean(subset(Tdata, NewMember=="True")$X2017..Long.Rain_Maize.acres),2)` acres for new farmers from control and treatment group respectively, and `r round(mean(subset(Cdata, NewMember=="False")$X2017..Long.Rain_Maize.acres),2)` and  `r round(mean(subset(Tdata, NewMember=="False")$X2017..Long.Rain_Maize.acres),2)` acres for returning farmers from control and treatment group respectively.
+```
+For the total credit observable, we again find that treatment has no significant effect on outcomes, however total enrolled seasons correlates well with total credit. For every additional season enrolled, average site level credit increases by 617 KES. 
+
+
+#Summary
+Overall, this study suffered significantly from a real lack of power, we therefore do not know whether the lack of associations between outcomes and treatment are due to there being no relationship, or just to our inability to detect a relationship. In the "Main Takeaways" section I have outlined in more depth the issues of low power as well as strategies to calculate this a priori. 
+
+
+
+
+#Appendix
+
+##Regression terminology:
+ _______.
+
+* **95% confidence interval**: The coefficient is just a point estimate of how much change in outcome variable is caused by being in the treatment group. An "X-Y"" 95% confidence error gives us a sense of how certain we are. It basically says that 95% of the time, we would expect that a treatment site performs better than a control site by this amount. The bigger the confidence interval, the more uncertainty we have.
+
+* **P-Value**: This is a measure of statistical significance. It tells you the probability that your null hypothesis (in this case, that the outcome variables in the regression *do not* correlate significantly to treatment) is true. Thus, for our purposes, we want to see very low p-values to believe that there is a strong causal relationship between treatment and outcome variable. The P-value and confidence interval are best interpreted together: if the p-value is pretty low (a general rule of thumb is <0.05), then you should look at the confidence interval and see whether the magnitude of change is meaningful or not.
+
+* **Statistical test**: This is the test used in P-value calculation. Each test comes with certain assumptions which must be met to ensure the P-value and confidence interval output are reliable. The quickest way to see if the test matches the data is by examining the histograms above and reading up on test assumptions on wikipedia. 
+
+ _______.
+
+
+##Non-robust regression results
+
+
+```{r, residuals plus}
+
+
+#residual plots first
+#tes <- c("X2017..Long.Rain_Maize.acres", "maize.adoption","X2017..Long.Rain_Bean.Intercrop_Credit", "X2017..Long.Rain_Envirofit.Cookstove.qty","solar", "TotalCredit") 
+supdat$stove.sqrt <- sqrt(supdat$X2017..Long.Rain_Envirofit.Cookstove.qty)
+#supdat$maize.c <- (supdat$maize.adoption)/mean(supdat$maize.adoption)
+#summary(supdat$maize.c)
+#summary(supdat$X2017..Long.Rain_Envirofit.Cookstove.qty)
+#sqrt the stove to normal resid
+#summary(supdat$stove.sqrt)
+tes <- c("X2017..Long.Rain_Maize.acres", "maize.adoption","beans", "stove.sqrt","solar", "TotalCredit") 
+for(ix in tes){
+  tempreg <- NULL
+  supdat$newy <- supdat[[ix]]
+  tempreg <- lm(formula = newy ~ TC + District + TotalEnrolledSeasons, data=supdat)
+  par(mfrow = c(2, 2))
+  plot(tempreg,which = c(1:4), caption=ix, main=ix )  
+  qqp=qqnorm(stdres(tempreg), plot.it=FALSE)
+  #print(ix)
+  #print(paste("R2:",cor(qqp$x,qqp$y)))
+    
+  }  
+
+
+```
+
+
+##robust regression with only treatment variable
+```{r, residuals}
+
+
+#residual plots first
+tes <- c("X2017..Long.Rain_Maize.acres", "maize.adoption","X2017..Long.Rain_Bean.Intercrop_Credit", "X2017..Long.Rain_Envirofit.Cookstove.qty","solar", "TotalCredit") 
+for(ix in tes){
+  tempreg <- NULL
+  supdat$newy <- supdat[[ix]]
+  tempreg <- lmrob(formula = newy ~ TC , data=supdat)
+  par(mfrow = c(2, 2))
+  plot(tempreg,which = c(1:4), caption=ix, main=ix )    }  
+```
+##Robust regression coefficients for transformed maize adoption when only treatment is considered as a factor
+```{r, robTC}
+stargazer(acre.maiz, type="text")
+```
+
+##robust regression diagnostic plots for coefficient tables in main body
+
+```{r robust plots}
+par(mfrow = c(2, 2))
+plot(acre.bean)
+par(mfrow = c(2, 2))
+plot(acre.stove)
+par(mfrow = c(2, 2))
+plot(acre.cred) 
+par(mfrow = c(2, 2))
+plot(acre.maizchoice)
+par(mfrow = c(2, 2))
+plot(acre.solar)
+
+```
