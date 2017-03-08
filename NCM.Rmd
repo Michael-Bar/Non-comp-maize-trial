@@ -328,8 +328,32 @@ The Non-Compulsory Maize Trial was run during enrollment for the 2017 core progr
 
 You can find the full document set [here]( https://drive.google.com/open?id=0B3_WyX1D8qwMNTk0VFhoRk5SYlE "Link")
 
+In this trial we are using a very generous p-value cut-off at 0.05. However, it should be noted that under proper statistical testing this would need to be adjusted for the number of hypothesis tests between the groups. E.g. if there are 11 hypotheses to be tested then under the Bonferroni correction, our p-value should actually be 0.05/11 = 0.005. Failure to do this will result in an inflated false discovery rate (FDR), however this is not an issue here due to a discovery rate of zero. 
 
 
+##Main hypotheses
+•H1	Making the maize product compulsory will result in higher maize adoption (measured both as average maize acres per farmer and the percent of farmers who chose to purchase any maize)
+ 
+•H2	Making the maize product compulsory will result in lower program enrollment (measured both as average clients per site and the percent of total households in a site that join One Acre Fund)
+ 
+•H3	Making the maize product compulsory will result in higher transaction size (measured as the average client loan size)
+ 
+•H4	Making the maize product compulsory will result in higher program impact (measured as an average of what each client purchased multiplied by the impact of those products)
+
+##Secondary hypotheses
+•H5	Average Acres of Maize Purchased (both overall and broken out by new and returning clients)
+ 
+•H6	Average Percent of 1AF Clients Adopting Maize (both overall and broken out by new and returning clients)
+ 
+•H7	Average Clients/Site (both overall and broken out by new and returning clients)
+ 
+•H8	Average 1AF Client Density (% total households joining 1AF)
+ 
+•H9	Average Transaction Size (both overall and broken out by new and returning clients)
+ 
+•H10	Average Program Impact (both overall and broken out by new and returning clients)
+ 
+•H11 Average Adoption Rates of Key Products (solar lights, cookstoves, beans)
 
 ```{r, hold, include=FALSE}
 ##PI main hypotheses
@@ -362,18 +386,18 @@ You can find the full document set [here]( https://drive.google.com/open?id=0B3_
 ```
 ## Main takeaways
 
-•	For all hypotheses tested, no signficant relationships were observed between treatment and response.  
+•	For all hypotheses tested, no signficant relationships were observed between treatment and response.
 
-•	All hypotheses, except maize adoption, were significantly underpowered. Ideal power is 0.8, most hypotheses failed to reach 0.4 power when non-normal responses are taken into account. The impact of low-power is three fold:
+•	Poor trial design has meant that all hypotheses, except maize adoption, were significantly underpowered. Ideal power is 0.8, most hypotheses here have power 0.05-0.4 under non-normal response distributions. The impact of low-power is three fold:
 
-• 1) There is a lower chance that a true effect can actually be detected
+• 1) It reduces the liklihood of actually detecting an effect which is real.
 
-• 2) There is a higher risk that a detected effect is false. Statistical power and p-values combine to form the positive predictive value (PPV), which is the probability that a detected effect represents a true effect. For example, of our 5 observations (maize adoption etc) let us assume only 1 is actually true (i.e. truly different between treated and control = 1 / (5 − 1) = 0.25), if our studies have 20% power (0.2), then PPV = 0.20 × 0.25 / (0.20 × 0.25 + 0.05) =  0.50. I.e. only one half of our claimed discoveries would actually be true. 
+• 2) It increases the risk that any detected effect is false via the positive predictive value (PPV), which is the probability that a detected effect represents a true effect. For example, of our 5 observations (maize adoption etc) let us assume only 1 is actually true (i.e. truly different between treated and control = 1 / (5 − 1) = 0.25), if our studies have 20% power (0.2), then PPV = 0.20 × 0.25 / (0.20 × 0.25 + 0.05) =  0.50. I.e. only one half of our claimed discoveries would actually be true. 
 
 • 3) the estimate of the effect of treatment is likely to be over exaggerated (this is known as the [Winner's curse](https://blogs.ncl.ac.uk/dennislendrem/2015/12/20/power-sample-size-and-the-winners-curse/ "Link") )
 
 ###Poor statistical power was preventable, to give a worked example:
-Control group bean adoption was ~ `r round(100*mean(subset(supdat,TC=="Control")$beans),0)` % (this was known pre-trial). Percentages pushing at the 0 or 100 bounds are very often non-normal (as is the case here, see histograms below). Hence, a non-parametric statistical power calculation would need to be performed (essentially a Monte Carlo method of calculating power against a simulated data set to find the proportion of observations that result in a p value of <0.05).
+Control group bean adoption was ~ `r round(100*mean(subset(supdat,TC=="Control")$beans),0)` % (this was known pre-trial). Percentages pushing at the 0 or 100 bounds are very often non-normal (as is the case here, see histograms below). Hence, a non-parametric statistical power calculation would need to be performed (essentially; a Monte Carlo method of calculating power against a simulated data set to find the proportion of observations that result in a p value of <0.05).
 ```{r, sim power , include=FALSE}
 t <- "beans"
 fakedat <- subset(supdat,TC=="Control")[[t]]
@@ -426,7 +450,7 @@ qq=qqnorm(supdat$TotalCredit, plot.it=FALSE)
 
 ```
 
-At a site level, we can see that few of the distributions look normal (perhaps the exception of total credit, with a QQplot R2 of `r round(cor(qq$x,qq$y),3) `). This lack of normality means we will need to perform non-parametric testing between control and treatment to identify significant differences. The non-parametric test employed here is the Mann-Whitney U test (aka. Wilcoxon ranked sum). Such a test on maize acreage gives an output like the following:
+At a site level, we can see that few of the distributions look normal (perhaps with the exception of total credit, with a QQplot R2 of `r round(cor(qq$x,qq$y),3) `). This lack of normality means we will need to perform non-parametric testing between control and treatment to identify significant differences. The non-parametric test employed here is the Mann-Whitney U test (aka. Wilcoxon ranked sum). Such a test on maize acreage gives an output like the following:
 
 ```{r, Wil-maize, echo= FALSE }
 #maize acres indiv
@@ -436,7 +460,9 @@ wilcox.test(subset(supdat, TC=="Control")$X2017..Long.Rain_Maize.acres, subset(s
 
 ```
 
-This test gives a p-value of `r round(wilcox.test(subset(supdat, TC=="Control")$X2017..Long.Rain_Maize.acres, subset(supdat, TC=="Treated")$X2017..Long.Rain_Maize.acres ,paired=FALSE, correct=TRUE)$p.value,2)`, suggesting there are no significant differences between treatment and control farmers in maize acreage. Let's look at some simple hypothesis testing and descriptive statistics for the other key hypothesis before we do a deeper dive:
+This test gives a p-value of `r round(wilcox.test(subset(supdat, TC=="Control")$X2017..Long.Rain_Maize.acres, subset(supdat, TC=="Treated")$X2017..Long.Rain_Maize.acres ,paired=FALSE, correct=TRUE)$p.value,2)`. P-values above our threshhold of 0.05 are indicative that an observation is likely due to chance, and that there is no significant difference between treatment and control farmers for this hypothesis.
+
+Let's look at some simple hypothesis testing and descriptive statistics for the other key hypothesis before we do a deeper dive:
 
 
 ```{r, Wil-bars, echo= FALSE }
@@ -526,7 +552,9 @@ plot_grid(g5,g6 , ncol = 2, nrow = 1)
 
 ```
 
-Once again, note that all but one of the main hypotheses are significantly underpowed (ideal power is ~0.8). This means that even if treatment were effecting the above measurables, we would be unable to detect it. The only significant difference observed was in maize adoption, however, regression analysis suggests that this is due to non-identical treatment/control sites rather than a genuine impact (see below).
+The above plots show the mean (bar height), confidence intervals (errorbars), Wilcoxon derived p-value and the Monte Carlo derived statistical power. A low P-value represents increased confidence that a finding is 'real' as opposed to just noise. Likewise, a higher statistical power means we can be sure that we are able to detect any difference in the first place. 
+
+Please note that all but one of the main hypotheses are significantly underpowed (ideal power is ~0.8). This means that even if treatment were effecting the above measurables, we would be unable to detect it. The only significant difference observed was in maize adoption, however, regression analysis suggests that this is due to non-identical treatment/control sites rather than a genuine impact (see below).
 
 
 
@@ -547,7 +575,10 @@ plot(acre.fit)
 
 ```
 
-We can see from these plots that a standard linear regression is unlikely to be accurate due to the presence of outliers (note the outlier points on the normal QQ plot). We can therefore run a robust regression to better estimate regression coefficients. A robust regression will give less weight to the outlying points, reducing their impact on our results:
+Above we see 4 plots. The plot in the upper left shows the residual errors plotted versus their fitted values. The residuals should be randomly distributed around the horizontal line representing a residual error of zero; that is, there should not be a distinct trend in the distribution of points. The plot in the upper right shows the distribution of residuals vs. a normal distribution, devaitions from this diagonal line suggest we are violating linear regression assumptions (and therefore cannot trust the outputs), note here that we have several outliers at either extreme of the diagonal. The bottom left plot is the scale-location plot and shows the square root of the standardized residuals (sort of a square root of relative error) as a function of the fitted values. Again, there should be no obvious trend in this plot. Finally the bottom right plot measures the impact of each point on our final output (leverage) vs the error of the point. 
+
+
+We can see from these plots that a standard linear regression is unlikely to be accurate due to the presence of outliers on the QQplot and the leverage plot. We can therefore run a robust regression to better estimate regression coefficients. A robust regression will give less weight to the outlying points, reducing their impact on our results:
 
 
 
@@ -556,12 +587,13 @@ acre.rob <-lmrob(formula = X2017..Long.Rain_Maize.acres ~ TC + District + TotalE
 #acre.rlm <-rlm(formula = X2017..Long.Rain_Maize.acres ~ TC + District + TotalEnrolledSeasons, data=supdat)
 
 #summary(acre.rob)$adj.r.squared
-par(mfrow = c(2, 2))
-plot(acre.rob, which=c(1:4))
+par(mfrow = c(3, 2))
+#plot(acre.rob, which=c(1:4))
+plot(acre.rob)
 #qqnorm(stdres(acre.rob))
 #qqline(stdres(acre.rob))
 
-stargazer(acre.rob, type = "text")
+
 
 # #rejig
 # #use boxcox to find decent transformation
@@ -588,6 +620,13 @@ stargazer(acre.rob, type = "text")
 
 ```
  
+ 
+ Re-examining the robust regression plots we see that the trend line for residuals vs fitted values is flat (good). We can now look at the regression coefficients:
+```{r, out1}
+stargazer(acre.rob, type = "text")
+```
+Here we have a table of terms and constants with confidence intervals in brackets. A positive term is iterpreted such that an increase in 1 unit of x (eg. 1 more season enrolled) increases the y outcome by the noted amount. Additionally, the presence of 2 or more asterix indicated statistical significance (the coefficient is significantly different from zero). For "TCTreated", the coefficient represents the difference between control and treatment group. 
+
 The robust regression for maize acreage fails to find any significant relationship between treatment and acreage. However, we do find a sigificant relationship between new and returning clients (expressed as total enrolled seasons). Every additional season enrolled increases the acreage devoted to maize by 0.06. 
 
 We can likewise run robust regression on the remaining observables (see plots in appendix).
