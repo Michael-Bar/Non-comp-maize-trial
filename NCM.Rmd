@@ -6,13 +6,10 @@ output:
   html_document:
     code_folding: hide
     number_sections: yes
-    theme: paper
+    theme: flatly
     toc: yes
     toc_depth: 6
     toc_float: yes
-  pdf_document:
-    toc: yes
-    toc_depth: '6'
 subtitle: Summary analysis of non-compulsory maize RCT, Kenya LR2017
 ---
 
@@ -229,15 +226,22 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
   }
 }
 
+```
 
-
-
+```{r}
 #### load data
 # seasons clients 2017, master version, as of 22 Feb 17
 #read in a few lines to get good col names
 titles <- read.csv("Season Clients Master_20170222-122327.csv", nrows = 100)
 #read in actual data with the faster read_csv 
-supdat <- read_csv("Season Clients Master_20170222-122327.csv", trim_ws = TRUE)
+forceUpdate <- FALSE
+if(file.exists("supdat.RData") && !forceUpdate) {
+  load("supdat.RData")
+} else {
+  supdat <- read.csv("Season Clients Master_20170222-122327.csv")
+  #supdat <- read_csv("Season Clients Master_20170222-122327.csv", trim_ws = TRUE)
+  save(supdat, file="supdat.RData")
+}
 colnames(supdat) <- colnames(titles)
 storedat <- supdat
 
@@ -250,6 +254,9 @@ storedat <- supdat
 TC <- read_csv("Non-Compulsory Maize Trial - Treatments by Site.csv" , trim_ws = TRUE, skip=3)
 ##supdat$Site
 #begin dropping
+```
+
+```{r}
 supdat <- subset(supdat, DistrictName != "KENYA STAFF")
 
 #start cleaning and prepping data for analysis
@@ -266,16 +273,25 @@ Tdata <- subset(supdat, semi.name %in% TC.T$semi.name)
 #NB for both new and ret clients
 #recode all maize choices as 1 and no choice as 0
 
-Cdata$maize.adoption <- Cdata$X2017..Long.Rain_Maize.Maize.Seed.choice
-Tdata$maize.adoption <- Tdata$X2017..Long.Rain_Maize.Maize.Seed.choice
+# use X2017..Long.Rain_Maize.acres instead?
 
-Cdata$maize.adoption[is.na(Cdata$maize.adoption)] <- as.numeric(0.0)
-Cdata$maize.adoption<- as.numeric(Cdata$maize.adoption )
-Cdata$maize.adoption[is.na(Cdata$maize.adoption)] <- as.numeric(1.0)
 
-Tdata$maize.adoption[is.na(Tdata$maize.adoption)] <- as.numeric(0.0)
-Tdata$maize.adoption <- as.numeric(Tdata$maize.adoption)
-Tdata$maize.adoption[is.na(Tdata$maize.adoption)] <- as.numeric(1.0)
+# Cdata$maize.adoption <- Cdata$X2017..Long.Rain_Maize.Maize.Seed.choice
+# Tdata$maize.adoption <- Tdata$X2017..Long.Rain_Maize.Maize.Seed.choice
+
+Cdata$maize.adoption <- ifelse(Cdata$X2017..Long.Rain_Maize.acres==0,0,1)
+Tdata$maize.adoption <- ifelse(Tdata$X2017..Long.Rain_Maize.acres==0,0,1)
+
+
+
+
+# Cdata$maize.adoption[is.na(Cdata$maize.adoption)] <- as.numeric(0.0)
+# Cdata$maize.adoption<- as.numeric(Cdata$maize.adoption )
+# Cdata$maize.adoption[is.na(Cdata$maize.adoption)] <- as.numeric(1.0)
+# 
+# Tdata$maize.adoption[is.na(Tdata$maize.adoption)] <- as.numeric(0.0)
+# Tdata$maize.adoption <- as.numeric(Tdata$maize.adoption)
+# Tdata$maize.adoption[is.na(Tdata$maize.adoption)] <- as.numeric(1.0)
 
 #solar #sunking only??
 Cdata$solar <- Cdata$X2017..Long.Rain_Sun.King.Home.qty+ Cdata$X2017..Long.Rain_Sun.King.Mobile.qty+ Cdata$X2017..Long.Rain_Sun.King.Pro.II.qty + Cdata$X2017..Long.Rain_Sun.King.Solo.qty
@@ -296,7 +312,7 @@ supdat$beans <- supdat$X2017..Long.Rain_New.Bean.Variety_Credit + supdat$X2017..
 supdat$beans[supdat$beans >0] <- 1
 
 
- #data at individ level
+#data at individ level
 #rejoin dataframe with new flag
 
 indidat <-supdat
@@ -314,15 +330,14 @@ supdat$TC[supdat$TC == 1] <- "Treated"
 #add district back in. This is a rather wierd way to do this, admittedly. 
 x<-  data.frame(do.call('rbind', strsplit(as.character(supdat$semi.name),'-',fixed=TRUE)))
 supdat$District <- x$X1
-head(supdat[c("District","semi.name")],n=50)
+#head(supdat[c("District","semi.name")],n=50)
 #final check
-table(supdat$TC)
+#table(supdat$TC)
 
 
 ```
 
 #Summary
-##Overview
 
 The Non-Compulsory Maize Trial was run during enrollment for the 2017 core program in Kenya. The trial aimed to determine the effects of One Acre Fund’s shift in policy to make maize an optional rather than compulsory product for clients, a change that was first implemented in the 2016 season. We are primarily interested in the effects of this policy change on program enrollment, maize adoption, and overall impact. In this trial, the treatment group had to purchase at least a 1/4 acre of maize in order to enroll in the program. 
 
@@ -332,28 +347,29 @@ In this trial we are using a very generous p-value cut-off at 0.05. However, it 
 
 
 ##Main hypotheses
-•H1	Making the maize product compulsory will result in higher maize adoption (measured both as average maize acres per farmer and the percent of farmers who chose to purchase any maize)
+
+* H1	Making the maize product compulsory will result in higher maize adoption (measured both as average maize acres per farmer and the percent of farmers who chose to purchase any maize)
  
-•H2	Making the maize product compulsory will result in lower program enrollment (measured both as average clients per site and the percent of total households in a site that join One Acre Fund)
+* H2	Making the maize product compulsory will result in lower program enrollment (measured both as average clients per site and the percent of total households in a site that join One Acre Fund)
  
-•H3	Making the maize product compulsory will result in higher transaction size (measured as the average client loan size)
+* H3	Making the maize product compulsory will result in higher transaction size (measured as the average client loan size)
  
-•H4	Making the maize product compulsory will result in higher program impact (measured as an average of what each client purchased multiplied by the impact of those products)
+* H4	Making the maize product compulsory will result in higher program impact (measured as an average of what each client purchased multiplied by the impact of those products)
 
 ##Secondary hypotheses
-•H5	Average Acres of Maize Purchased (both overall and broken out by new and returning clients)
+* H5	Average Acres of Maize Purchased (both overall and broken out by new and returning clients)
  
-•H6	Average Percent of 1AF Clients Adopting Maize (both overall and broken out by new and returning clients)
+* H6	Average Percent of 1AF Clients Adopting Maize (both overall and broken out by new and returning clients)
  
-•H7	Average Clients/Site (both overall and broken out by new and returning clients)
+* H7	Average Clients/Site (both overall and broken out by new and returning clients)
  
-•H8	Average 1AF Client Density (% total households joining 1AF)
+* H8	Average 1AF Client Density (% total households joining 1AF)
  
-•H9	Average Transaction Size (both overall and broken out by new and returning clients)
+* H9	Average Transaction Size (both overall and broken out by new and returning clients)
  
-•H10	Average Program Impact (both overall and broken out by new and returning clients)
+* H10	Average Program Impact (both overall and broken out by new and returning clients)
  
-•H11 Average Adoption Rates of Key Products (solar lights, cookstoves, beans)
+* H11 Average Adoption Rates of Key Products (solar lights, cookstoves, beans)
 
 ```{r, hold, include=FALSE}
 ##PI main hypotheses
@@ -386,17 +402,17 @@ In this trial we are using a very generous p-value cut-off at 0.05. However, it 
 ```
 ## Main takeaways
 
-•	For all hypotheses tested, no signficant relationships were observed between treatment and response.
+> * For all hypotheses tested, no signficant relationships were observed between treatment and response.
+* Poor trial design has meant that all hypotheses, except maize adoption, were significantly underpowered. Ideal power is 0.8, most hypotheses here have power 0.05-0.4 under non-normal response distributions. The impact of low-power is three fold:
 
-•	Poor trial design has meant that all hypotheses, except maize adoption, were significantly underpowered. Ideal power is 0.8, most hypotheses here have power 0.05-0.4 under non-normal response distributions. The impact of low-power is three fold:
+>  + 1) It reduces the liklihood of actually detecting an effect which is real.
+  + 2) It increases the risk that any detected effect is false via the positive predictive value (PPV), which is the probability that a detected effect represents a true effect. For example, of our 5 observations (maize adoption etc) let us assume only 1 is actually true (i.e. truly different between treated and control = 1 / (5 − 1) = 0.25), if our studies have 20% power (0.2), then PPV = 0.20 × 0.25 / (0.20 × 0.25 + 0.05) =  0.50. I.e. only one half of our claimed discoveries would actually be true. 
+  + 3) the estimate of the effect of treatment is likely to be over exaggerated (this is known as the [Winner's curse](https://blogs.ncl.ac.uk/dennislendrem/2015/12/20/power-sample-size-and-the-winners-curse/ "Link") )
 
-• 1) It reduces the liklihood of actually detecting an effect which is real.
+###Poor statistical power was preventable
 
-• 2) It increases the risk that any detected effect is false via the positive predictive value (PPV), which is the probability that a detected effect represents a true effect. For example, of our 5 observations (maize adoption etc) let us assume only 1 is actually true (i.e. truly different between treated and control = 1 / (5 − 1) = 0.25), if our studies have 20% power (0.2), then PPV = 0.20 × 0.25 / (0.20 × 0.25 + 0.05) =  0.50. I.e. only one half of our claimed discoveries would actually be true. 
+ML note: explain parametric and non-parametric in a glossary.
 
-• 3) the estimate of the effect of treatment is likely to be over exaggerated (this is known as the [Winner's curse](https://blogs.ncl.ac.uk/dennislendrem/2015/12/20/power-sample-size-and-the-winners-curse/ "Link") )
-
-###Poor statistical power was preventable, to give a worked example:
 Control group bean adoption was ~ `r round(100*mean(subset(supdat,TC=="Control")$beans),0)` % (this was known pre-trial). Percentages pushing at the 0 or 100 bounds are very often non-normal (as is the case here, see histograms below). Hence, a non-parametric statistical power calculation would need to be performed (essentially; a Monte Carlo method of calculating power against a simulated data set to find the proportion of observations that result in a p value of <0.05).
 ```{r, sim power , include=FALSE}
 t <- "beans"
@@ -437,7 +453,7 @@ h5 <- ggplot(supdat, aes(x=X2017..Long.Rain_Envirofit.Cookstove.qty,color=TC)) +
 h6 <- ggplot(supdat, aes(x=TotalCredit,color=TC)) + geom_density(bw=300) +ggtitle("Total credit")
 
 #qq=qqnorm(supdat$TotalCredit, plot.it=FALSE)
-multiplot(h1,h2,h3,h4,h5,h6,  cols=2)
+print(multiplot(h1,h2,h3,h4,h5,h6,  cols=2))
 
 qq=qqnorm(supdat$TotalCredit, plot.it=FALSE)
 
@@ -459,6 +475,8 @@ At a site level, we can see that few of the distributions look normal (perhaps w
 wilcox.test(subset(supdat, TC=="Control")$X2017..Long.Rain_Maize.acres, subset(supdat, TC=="Treated")$X2017..Long.Rain_Maize.acres ,paired=FALSE, correct=TRUE)
 
 ```
+
+ML formatting note: use knitr::kable to format the wilcox test more nicely or maybe just so the p-value. I try to avoid just having raw R output.
 
 This test gives a p-value of `r round(wilcox.test(subset(supdat, TC=="Control")$X2017..Long.Rain_Maize.acres, subset(supdat, TC=="Treated")$X2017..Long.Rain_Maize.acres ,paired=FALSE, correct=TRUE)$p.value,2)`. P-values above our threshhold of 0.05 are indicative that an observation is likely due to chance, and that there is no significant difference between treatment and control farmers for this hypothesis.
 
@@ -575,7 +593,14 @@ plot(acre.fit)
 
 ```
 
-Above we see 4 plots. The plot in the upper left shows the residual errors plotted versus their fitted values. The residuals should be randomly distributed around the horizontal line representing a residual error of zero; that is, there should not be a distinct trend in the distribution of points. The plot in the upper right shows the distribution of residuals vs. a normal distribution, devaitions from this diagonal line suggest we are violating linear regression assumptions (and therefore cannot trust the outputs), note here that we have several outliers at either extreme of the diagonal. The bottom left plot is the scale-location plot and shows the square root of the standardized residuals (sort of a square root of relative error) as a function of the fitted values. Again, there should be no obvious trend in this plot. Finally the bottom right plot measures the impact of each point on our final output (leverage) vs the error of the point. 
+### Regression plot interpretation
+
+Above we see 4 plots: 
+
+* The plot in the upper left shows the residual errors plotted versus their fitted values. The residuals should be randomly distributed around the horizontal line representing a residual error of zero; that is, there should not be a distinct trend in the distribution of points. 
+* The plot in the upper right shows the distribution of residuals vs. a normal distribution, devaitions from this diagonal line suggest we are violating linear regression assumptions (and therefore cannot trust the outputs), note here that we have several outliers at either extreme of the diagonal. 
+* The bottom left plot is the scale-location plot and shows the square root of the standardized residuals (sort of a square root of relative error) as a function of the fitted values. Again, there should be no obvious trend in this plot. 
+* Finally the bottom right plot measures the impact of each point on our final output (leverage) vs the error of the point. 
 
 
 We can see from these plots that a standard linear regression is unlikely to be accurate due to the presence of outliers on the QQplot and the leverage plot. We can therefore run a robust regression to better estimate regression coefficients. A robust regression will give less weight to the outlying points, reducing their impact on our results:
@@ -621,11 +646,11 @@ plot(acre.rob)
 ```
  
  
- Re-examining the robust regression plots we see that the trend line for residuals vs fitted values is flat (good). We can now look at the regression coefficients:
-```{r, out1}
-stargazer(acre.rob, type = "text")
+Re-examining the robust regression plots we see that the trend line for residuals vs fitted values is flat (good). We can now look at the regression coefficients:
+```{r, out1, results='asis'}
+#stargazer(acre.rob, type = "html")
 ```
-Here we have a table of terms and constants with confidence intervals in brackets. A positive term is iterpreted such that an increase in 1 unit of x (eg. 1 more season enrolled) increases the y outcome by the noted amount. Additionally, the presence of 2 or more asterix indicated statistical significance (the coefficient is significantly different from zero). For "TCTreated", the coefficient represents the difference between control and treatment group. 
+Here we have a table of terms and constants with confidence intervals in brackets. A positive term is interpreted such that an increase in 1 unit of x (eg. 1 more season enrolled) increases the y outcome by the noted amount. Additionally, the presence of 2 or more asterix indicated statistical significance (the coefficient is significantly different from zero). For "TCTreated", the coefficient represents the difference between control and treatment group. 
 
 The robust regression for maize acreage fails to find any significant relationship between treatment and acreage. However, we do find a sigificant relationship between new and returning clients (expressed as total enrolled seasons). Every additional season enrolled increases the acreage devoted to maize by 0.06. 
 
@@ -637,8 +662,11 @@ supdat <- Filter(function(x)!all(is.na(x)), supdat)
 ##
 
 #non normal
-acre.bean <-lmrob(formula = beans ~ TotalEnrolledSeasons + TC + District, data=supdat)
-stargazer(acre.bean, type = "text")
+acre.bean <-lmrob(formula = beans ~ TC + TotalEnrolledSeasons+ District, data=supdat)
+```
+
+```{r, results='asis'}
+#stargazer(acre.bean, type = "html")
 ```
 
 Observing bean adoption, neither number of enrolled seasons or treatment are significant. 
@@ -647,19 +675,30 @@ Observing bean adoption, neither number of enrolled seasons or treatment are sig
 #non normal
 #sqrt X2017..Long.Rain_Envirofit.Cookstove.qty
 supdat$stove.sqrt <- sqrt(supdat$X2017..Long.Rain_Envirofit.Cookstove.qty)
-acre.stove <-lmrob(formula = stove.sqrt  ~ TotalEnrolledSeasons + TC + District, data=supdat)
-stargazer(acre.stove, type = "text")
+acre.stove <-lmrob(formula = stove.sqrt  ~ TC +  TotalEnrolledSeasons + District, data=supdat)
+```
+
+```{r, results='asis'}
+#stargazer(acre.stove, type = "text")
 ```
 
 We transform the cookstove data to it's square root to acheive normally distributed residuals. Once again we find that treatment has no detectable effect, however total enrolled seasons is significant at the 0.01 p-level. 
 
 ```{r, solarreg}
 ##
-acre.solar <-lmrob(formula = solar ~ TotalEnrolledSeasons + TC + District, data=supdat)
-stargazer(acre.solar, type = "text")
+acre.solar <-lmrob(formula = solar ~ TC + TotalEnrolledSeasons + District, data=supdat)
+```
+
+```{r, results='asis'}
+stargazer(acre.rob, acre.bean, acre.stove, acre.solar, type = "html",
+          omit="District",
+          covariate.labels = c("Treatment", "OAF Seasons"),
+          dep.var.labels = c("Maize acres", "Beans", "Stove", "Solar"))
 ```
 
 Solar adoption is also not significantly (p<0.05) correlated with treatment or total enrolled seasons. Note that we will not accept a 0.1 p-value as significant due to the [multiple comparison problem]( https://en.wikipedia.org/wiki/Multiple_comparisons_problem "wiki link").
+
+ML note: I combined the tables into one regression as our X vars were the same.
 
 Maize adoption is skewed heavily toward 100% adoption, for this reason we will employ a logit transformation of the response variable to ensure normally distributed residuals (see appendix for untransformed maize adoption regression):
 
@@ -700,8 +739,12 @@ This transformation yields normal looking residuals with an R2 against a normal 
 
 We can now examine the regression output:
 
-```{r, maizout}
-stargazer(acre.maizchoice, type = "text")
+```{r, maizout, results='asis'}
+stargazer(acre.maizchoice, type = "html",
+          omit="District")
+```
+
+```{r}
 x<- round(wilcox.test(subset(supdat, TC=="Control")$TotalEnrolledSeasons, subset(supdat, TC=="Treated")$TotalEnrolledSeasons ,paired=FALSE, correct=TRUE)$p.value,3)
 
 ```
@@ -710,9 +753,12 @@ Whilst our simple analysis identified treatment as significantly correlated with
 
 ```{r, creditreg}
 ##
-acre.cred <-lmrob(formula = TotalCredit ~ TotalEnrolledSeasons + TC + District, data=supdat)
-stargazer(acre.cred, type = "text")
+acre.cred <-lmrob(formula = TotalCredit ~ TC + TotalEnrolledSeasons + District, data=supdat)
+```
 
+```{r, results='asis'}
+stargazer(acre.cred, type = "html",
+          omit="District")
 
 #We can further break this down by new or returning member; `r round(mean(subset(Cdata, NewMember=="True")$X2017..Long.Rain_Maize.acres),2)` and  `r round(mean(subset(Tdata, NewMember=="True")$X2017..Long.Rain_Maize.acres),2)` acres for new farmers from control and treatment group respectively, and `r round(mean(subset(Cdata, NewMember=="False")$X2017..Long.Rain_Maize.acres),2)` and  `r round(mean(subset(Tdata, NewMember=="False")$X2017..Long.Rain_Maize.acres),2)` acres for returning farmers from control and treatment group respectively.
 ```
@@ -720,7 +766,10 @@ For the total credit observable, we again find that treatment has no significant
 
 
 #Summary
+
 Overall, this study suffered significantly from a real lack of power, we therefore do not know whether the lack of associations between outcomes and treatment are due to there being no relationship, or just to our inability to detect a relationship. In the "Main Takeaways" section I have outlined in more depth the issues of low power as well as strategies to calculate this a priori. 
+
+**ML note**: can you add a summary table that goes hypothesis by hypothesis and provides both a coefficient, indication of significance, and text interpretation? Or alternatively, it shows hypothesis This would be the quick glance summary of results by hypothesis and you can link to it from the key takeaways.
 
 
 
@@ -784,8 +833,9 @@ for(ix in tes){
   plot(tempreg,which = c(1:4), caption=ix, main=ix )    }  
 ```
 ##Robust regression coefficients for transformed maize adoption when only treatment is considered as a factor
-```{r, robTC}
-stargazer(acre.maiz, type="text")
+```{r, robTC, results='asis'}
+stargazer(acre.maiz, type="html",
+          omit="District")
 ```
 
 ##robust regression diagnostic plots for coefficient tables in main body
