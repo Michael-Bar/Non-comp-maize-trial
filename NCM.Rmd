@@ -414,7 +414,13 @@ In this trial we are using a very generous p-value cut-off at 0.05. However, it 
 ML note: explain parametric and non-parametric in a glossary.
 
 Control group bean adoption was ~ `r round(100*mean(subset(supdat,TC=="Control")$beans),0)` % (this was known pre-trial). Percentages pushing at the 0 or 100 bounds are very often non-normal (as is the case here, see histograms below). Hence, a non-parametric statistical power calculation would need to be performed (essentially; a Monte Carlo method of calculating power against a simulated data set to find the proportion of observations that result in a p value of <0.05).
+
+
+Added a couple regressions, cleaned up language a bit.
 ```{r, sim power , include=FALSE}
+
+#Hence, a non-parametric statistical power calculation would need to be performed (essentially; a Monte Carlo method of calculating power against a simulated data set to find the proportion of observations that result in a p value of <0.05).
+
 t <- "beans"
 fakedat <- subset(supdat,TC=="Control")[[t]]
 xi<-0.0175
@@ -428,7 +434,9 @@ pt <- pwr.2p.test(h = inp$effectsi , n = length(subset(supdat,TC=="Control")[[t]
 
 ```
 
-Such a simulation suggests a 25% increase in bean adoption would only yield a power of `r round(pt$power,3)` for normally distributed data and `r round(tp,3)` for non-normal data. Going forward, I have provided a short R script for the easy calculation of statistical powers under normal and non-normal regimes ([here](  https://drive.google.com/open?id=0B3_WyX1D8qwMYVI1MnlBYlNCQ1k  "Link")).
+Looking at bean adoption as a worked example, if we run both the normal (invalid) power calculation, and the non-normal (valid) power calculation, the simulations suggests a 25% increase in bean adoption would only yield a power of `r round(pt$power,3)` for normally distributed data and `r round(tp,3)` for non-normal data. This power is clearly insufficient for a robust analysis that is able to distinguish between there being no effect, and being unable to detect an effect. 
+
+Going forward, I have provided a short R script for the easy calculation of statistical powers under normal and non-normal regimes ([here](  https://drive.google.com/open?id=0B3_WyX1D8qwMYVI1MnlBYlNCQ1k  "Link")).
 
 # Data analysis
 ##Data preparation
@@ -542,18 +550,29 @@ g5 <- add_sub(g5, paste("stat power ~ ",round(tp,3),"\n","Wilcoxon P-value:",rou
 
 C.site.num <-c(NULL)
 T.site.num <- c(NULL)
-for(i in unique(Cdata$SiteName)){
-  da <- subset(Cdata, SiteName==i)
+Cnom <- c()
+Tnom <- c()
+
+for(i in unique(Cdata$semi.name)){
+  da <- subset(Cdata, semi.name==i)
   len <- length(unique(da$GlobalClientID))
-  C.site.num <- c(C.site.num, len) }
-for(i in unique(Tdata$SiteName)){
-  da <- subset(Tdata, SiteName==i)
+  C.site.num <- c(C.site.num, len)
+  Cnom <- c(Cnom, i)
+    }
+
+for(i in unique(Tdata$semi.name)){
+  da <- subset(Tdata, semi.name==i)
   len <- length(unique(da$GlobalClientID))
-  T.site.num <- c(T.site.num, len) }
+  T.site.num <- c(T.site.num, len)
+  Tnom <- c(Tnom, i)
+}
+
 #convert to df and bind
-temp <- data.frame("Nsites" = C.site.num , TC = "Control")
-temp2 <- data.frame("Nsites" = T.site.num , TC = "Treated")
+temp <- data.frame("Nsites" = C.site.num , TC = "Control", "semi.name" = Cnom )
+temp2 <- data.frame("Nsites" = T.site.num , TC = "Treated", "semi.name" = Tnom )
 temp <- rbind(temp, temp2)
+msite <- merge(temp, supdat, by= "semi.name")
+
 
 t <- "Nsites"
 tp <- power( subset(temp,TC=="Treated")[[t]] , subset(temp,TC=="Control")[[t]] , reps=1000, size= length(subset(temp, TC=="Control")[[t]] ))
@@ -583,6 +602,7 @@ To deconvolute various factors we can run a regression analysis. This will allow
 ##Simple regression results
 Let us first examine the plots from a simple linear regression on maize acreage:
 
+###Maize acreage (H1 H5)
 ```{r, maize_acre breakdown}
 
 acre.fit <-lm(formula = X2017..Long.Rain_Maize.acres ~ TotalEnrolledSeasons + TC + District, data=supdat)
@@ -656,6 +676,7 @@ The robust regression for maize acreage fails to find any significant relationsh
 
 We can likewise run robust regression on the remaining observables (see plots in appendix).
 
+### Bean, cookstove and solar adoption (H11)
 ```{r, beanreg}
 
 supdat <- Filter(function(x)!all(is.na(x)), supdat)
@@ -702,6 +723,8 @@ ML note: I combined the tables into one regression as our X vars were the same.
 
 Maize adoption is skewed heavily toward 100% adoption, for this reason we will employ a logit transformation of the response variable to ensure normally distributed residuals (see appendix for untransformed maize adoption regression):
 
+
+###Maize adoption (H1/H6)
 ```{r, maizreg}
 #trans data to make residuals normalish
 supdat$logitmaize.adoption <- logit(supdat$maize.adoption, percents=FALSE, adjust = -0.05)
@@ -751,6 +774,7 @@ x<- round(wilcox.test(subset(supdat, TC=="Control")$TotalEnrolledSeasons, subset
 
 Whilst our simple analysis identified treatment as significantly correlated with, when we correct for other factors this significance disappears (see appendix for a robust regression of maize adoption against only TC). However total enrolled seasons is clearly significant. This suggests that the difference in maize adoption between treatment and control sites was not due to treatment, but other factors. This nullifies our only significant finding from this analysis. 
 
+### Total loan size (H3/H9)
 ```{r, creditreg}
 ##
 acre.cred <-lmrob(formula = TotalCredit ~ TC + TotalEnrolledSeasons + District, data=supdat)
@@ -765,6 +789,20 @@ stargazer(acre.cred, type = "html",
 For the total credit observable, we again find that treatment has no significant effect on outcomes, however total enrolled seasons correlates well with total credit. For every additional season enrolled, average site level credit increases by 617 KES. 
 
 
+### Clients per site (H2/H7)
+```{r, sitesize}
+msite$TC <- supdat$TC
+msite$transNclients <- sqrt(msite$Nsites)
+nclients <-lmrob(formula = transNclients ~ TotalEnrolledSeasons + TC + District, data=msite)
+stargazer(nclients, type = "text")
+qn=qqnorm(stdres(nclients), plot.it=FALSE)
+x1 <- cor(qn$x,qn$y)
+
+
+```
+
+Once again, non-normal residuals means we need to transform our Y-variable. In this case a square root transform yields an R-squared of `r, round(x1,3)` against a normal distribution. Examination of the coefficients reveals no significant relationships were detected. 
+
 #Summary
 
 Overall, this study suffered significantly from a real lack of power, we therefore do not know whether the lack of associations between outcomes and treatment are due to there being no relationship, or just to our inability to detect a relationship. In the "Main Takeaways" section I have outlined in more depth the issues of low power as well as strategies to calculate this a priori. 
@@ -775,6 +813,9 @@ Overall, this study suffered significantly from a real lack of power, we therefo
 
 
 #Appendix
+
+##Program impact hypothesis (H4/H9)
+Note that if there are no significant differences between treatment and control adoption of goods, then likewise there will be no significant difference in program impact between treatment and control (a linear transformation of populations cannot yield new populations). 
 
 ##Regression terminology:
  _______.
@@ -851,5 +892,7 @@ par(mfrow = c(2, 2))
 plot(acre.maizchoice)
 par(mfrow = c(2, 2))
 plot(acre.solar)
+par(mfrow = c(2, 2))
+plot(nclients)
 
 ```
