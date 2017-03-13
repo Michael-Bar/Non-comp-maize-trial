@@ -334,7 +334,7 @@ The Non-Compulsory Maize Trial was run during enrollment for the 2017 core progr
 
 You can find the full document set [here]( https://drive.google.com/open?id=0B3_WyX1D8qwMNTk0VFhoRk5SYlE "Link")
 
-In this trial we are using a very generous p-value cut-off at 0.05. However, it should be noted that under proper statistical testing this would need to be adjusted for the number of hypothesis tests between the groups. E.g. if there are 11 hypotheses to be tested then under the Bonferroni correction, our p-value should actually be 0.05/11 = 0.005. Failure to do this will result in an inflated false discovery rate (FDR), however this is not an issue here due to a discovery rate of zero. 
+In this trial we are using a very generous p-value cut-off at 0.05. However, it should be noted that under proper statistical testing this would need to be adjusted for the number of hypothesis tests between the groups. E.g. if there are 11 hypotheses to be tested then under the Bonferroni correction, our p-value should actually be 0.05/11 = 0.005. Failure to do this will result in an inflated false discovery rate (FDR - essentially how many of our "discoveries" are actually false), however this is not an issue here due to a discovery rate of zero. 
 
 
 ## Main hypotheses
@@ -353,7 +353,7 @@ In this trial we are using a very generous p-value cut-off at 0.05. However, it 
  
 * H7	Average Clients/Site (both overall and broken out by new and returning clients)
  
-* H8	Average 1AF Client Density (% total households joining 1AF)
+* H8	Average 1AF Client Density (% total households joining 1AF) - (this was since removed as a hypothesis)
  
 * H9	Average Transaction Size (both overall and broken out by new and returning clients)
  
@@ -369,17 +369,19 @@ In this trial we are using a very generous p-value cut-off at 0.05. However, it 
 
   + 1) It reduces the liklihood of actually detecting an effect which is real.
 
-  + 2) It increases the risk that any detected effect is false via the positive predictive value (PPV), which is the probability that a detected effect represents a true effect. For example, of our 5 observations (maize adoption etc) let us assume only 1 is actually true (i.e. truly different between treated and control = 1 / (5 − 1) = 0.25), if our studies have 20% power (0.2), then PPV = 0.20 × 0.25 / (0.20 × 0.25 + 0.05) =  0.50. I.e. only one half of our claimed discoveries would actually be true. 
+  + 2) It increases the risk that any detected effect is false (this is via the positive predictive value (PPV), which is the probability that a detected effect represents a true effect. For example, of our 5 observations (maize adoption etc) let us assume only 1 is actually true (i.e. truly different between treated and control = 1 / (5 − 1) = 0.25), if our studies have 20% power (0.2), then PPV = 0.20 × 0.25 / (0.20 × 0.25 + 0.05) =  0.50. I.e. only one half of our claimed discoveries would actually be true). 
 
   + 3) the estimate of the effect of treatment is likely to be over exaggerated (this is known as the [Winner's curse](https://blogs.ncl.ac.uk/dennislendrem/2015/12/20/power-sample-size-and-the-winners-curse/ "Link") )
 
-### Poor statistical power was preventable
-Control group bean adoption was ~ `r round(100*mean(subset(supdat,TC=="Control")$beans),0)` % (this was known pre-trial). Percentages pushing at the 0 or 100 bounds are very often non-normal (as is the case here, see histograms below). Hence, a statistical test and power calculation designed for non-normal distributions is required. Details aside, these calculations will ensure that you have enough power to detect effects of interest. 
+### How to prevent poor statistical power
+Statistical power calculations require 3 things, an estimate of the size of the effect (this is often not a raw number, but standardized into standard deviations from the mean), an estimate of error (from pilots or historical data) and a proposed sample size. Several online calculators exist to streamline this process (e.g. [here](http://powerandsamplesize.com/ "Power") ), however these calculations often assume a normal distribution of data (a nice smooth bell curve). It is very common for One Acre Fund data to be non-normal; this is because many of our metrics either push at the 0 or 100% bounds, or reveal some underlying inequality (e.g. maize acreage seems to have 2 peaks, representing two clusters of farmers). In these cases the online calculators are essentially useless, and another approach must be taken to calculate power. As noted above, the impact of low power is fatal to most studies, and often means that resources invested in a trial have no return. 
+
+We can look at how to calculate statistical power for non-normal samples with the following relevant worked example: control group bean adoption was ~ `r round(100*mean(subset(supdat,TC=="Control")$beans),0)` % (this was known pre-trial). As mentioned, percentages pushing at the 0 or 100 bounds are very often non-normal (as is the case here, see histograms below). Hence, statistical tests and power calculation designed for non-normal distributions are required.
 
 
 
 
-```{r, sim power , include=FALSE}
+```{r, sim power}
 
 #Hence, a non-parametric statistical power calculation would need to be performed (essentially; a Monte Carlo method of calculating power against a simulated data set to find the proportion of observations that result in a p value of <0.05).
 
@@ -396,13 +398,13 @@ pt <- pwr.2p.test(h = inp$effectsi , n = length(subset(supdat,TC=="Control")[[t]
 
 ```
 
-Looking at bean adoption as a worked example, if we run both the normal (invalid) power calculation, and the non-normal (valid) power calculation, the simulations suggests a 25% increase in bean adoption would only yield a power of `r round(pt$power,3)` for normally distributed data and `r round(tp,3)` for non-normal data. This power is clearly insufficient for a robust analysis that is able to distinguish between there being no effect, and being unable to detect an effect. 
+If we run both the normal (invalid) power calculation, and the non-normal (valid) power calculation, and simulate that the treatment group would expect to see, at max, a 25% increase in bean adoption, we will yield a power of `r round(pt$power,3)` for normally distributed data and `r round(tp,3)` for non-normal data. These powers are clearly insufficient for a robust analysis that is able to distinguish between there being no actual effect, and just being unable to detect an effect. This tells us we will need a significantly larger sample size to probe the treatment of interest. The simplest way to find the right sample size is to repeat this calculation with increasing sample sizes until our non-normal power is in excess of 0.8.  
 
-Going forward, I have provided a short R script for the easy calculation of statistical powers under normal and non-normal regimes ([here](  https://drive.google.com/open?id=0B3_WyX1D8qwMYVI1MnlBYlNCQ1k  "Link")).
+Going forward, I have provided a short R script for the easy calculation of statistical powers under normal and non-normal regimes ([here](  https://drive.google.com/open?id=0B3_WyX1D8qwMYVI1MnlBYlNCQ1k  "Link")), this will soon be expanded into an app for easy use. Feel free to [email](mike.barber@oneacrefund.org, "Mike's email") me for more information and guidance on using these scripts. 
 
 # Data analysis
 ## Data preparation
-Adoption data was binarized from either product credit or quantity columns in [Season Clients master](https://drive.google.com/open?id=0B3_WyX1D8qwMOXNBclh6TkV1bmc "dataset"). Farmers were then summarised into groups, leading the binarized outcome to become a fraction between 0 and 1. Site names were matched to the treatment/control list provided in [treatment lists](https://drive.google.com/a/oneacrefund.org/file/d/0B3_WyX1D8qwMOEZKbDRhNmt5ck0/view?usp=sharing "Treatment and control lists").
+Adoption data was binarized into 1s and 0s from either product credit or quantity columns in [Season Clients master](https://drive.google.com/open?id=0B3_WyX1D8qwMOXNBclh6TkV1bmc "dataset"). Farmers were then summarised into groups, leading the binarized outcome to become a fraction between 0 and 1. Site names were matched to the treatment/control list provided in [treatment lists](https://drive.google.com/a/oneacrefund.org/file/d/0B3_WyX1D8qwMOEZKbDRhNmt5ck0/view?usp=sharing "Treatment and control lists").
 
 
 
@@ -594,47 +596,20 @@ We can see from these plots that a standard linear regression is unlikely to be 
 
 
 ```{r, lms}
-acre.rob <-lmrob(formula = X2017..Long.Rain_Maize.acres ~ TC + District + TotalEnrolledSeasons, data=supdat)
-#acre.rlm <-rlm(formula = X2017..Long.Rain_Maize.acres ~ TC + District + TotalEnrolledSeasons, data=supdat)
+acre.rob <-lmrob(formula = X2017..Long.Rain_Maize.acres ~ TC  + TotalEnrolledSeasons + District , data=supdat)
 
 #summary(acre.rob)$adj.r.squared
 par(mfrow = c(3, 2))
 #plot(acre.rob, which=c(1:4))
 plot(acre.rob)
-#qqnorm(stdres(acre.rob))
-#qqline(stdres(acre.rob))
 
-
-
-# #rejig
-# #use boxcox to find decent transformation
-# supdat$newy <- supdat$X2017..Long.Rain_Maize.acres+0.000001 # offset all by minute to rid of zeros
-# bc <- boxcox(newy ~ TotalEnrolledSeasons + TC + District, data=supdat)
-# trans <- bc$x[which.max(bc$y)]
-# trans
-# #almost 0.5, so lets use a sqrt
-# #original trans
-# acre.p <-glm(formula = newy ~ TotalEnrolledSeasons + TC + Facilitator +SiteName + DistrictName, data=supdat, family=poisson(link="sqrt"))
-# #newtrans
-# sup <- supdat
-# sup$Totalsea <- supdat$TotalEnrolledSeasons**(-2/3)
-# acre.g <-glm(formula = newy ~ Totalsea + TC + Facilitator +SiteName + DistrictName, data=sup)
-# 
-# 
-# qqnorm(stdres(acre.g)) 
-# qqnorm(stdres(acre.p))
-# qqline(stdres(acre.g))
-# 
-# plot(acre.p)
-# #summary(acre.p)$deviance
-# tidy(acre.p)[1:7,]
 
 ```
  
  
  Re-examining the robust regression plots we see that the trend line for residuals vs fitted values is flat (good). We can now look at the regression coefficients:
-```{r, out1}
-#stargazer(acre.rob, type = "text")
+```{r, out1, results='asis'}
+stargazer(acre.rob, type = "html", omit="District",  covariate.labels = c("Treatment", "OAF Seasons"))
 ```
 Here we have a table of terms and constants with confidence intervals in brackets. A positive term is iterpreted such that an increase in 1 unit of x (eg. 1 more season enrolled) increases the y outcome by the noted amount. Additionally, the presence of 2 or more asterix indicated statistical significance (the coefficient is significantly different from zero). For "Treatment", the coefficient represents the difference between control and treatment group. 
 
@@ -649,7 +624,7 @@ supdat <- Filter(function(x)!all(is.na(x)), supdat)
 ##
 
 #non normal
-acre.bean <-lmrob(formula = beans ~ TotalEnrolledSeasons + TC + District, data=supdat)
+acre.bean <-lmrob(formula = beans ~ TC + TotalEnrolledSeasons  + District, data=supdat)
 #stargazer(acre.bean, type = "text")
 ```
 
@@ -659,7 +634,7 @@ acre.bean <-lmrob(formula = beans ~ TotalEnrolledSeasons + TC + District, data=s
 #non normal
 #sqrt X2017..Long.Rain_Envirofit.Cookstove.qty
 supdat$stove.sqrt <- sqrt(supdat$X2017..Long.Rain_Envirofit.Cookstove.qty)
-acre.stove <-lmrob(formula = stove.sqrt  ~ TotalEnrolledSeasons + TC + District, data=supdat)
+acre.stove <-lmrob(formula = stove.sqrt  ~ TC + TotalEnrolledSeasons + District, data=supdat)
 #stargazer(acre.stove, type = "text")
 ```
 
@@ -667,13 +642,13 @@ acre.stove <-lmrob(formula = stove.sqrt  ~ TotalEnrolledSeasons + TC + District,
 
 ```{r, solarreg}
 ##
-acre.solar <-lmrob(formula = solar ~ TotalEnrolledSeasons + TC + District, data=supdat)
+acre.solar <-lmrob(formula = solar ~ TC + TotalEnrolledSeasons + District, data=supdat)
 #stargazer(acre.solar, type = "text")
 
 ```
 
 ```{r, starg1, results='asis'}
-stargazer(acre.rob, acre.bean, acre.stove, acre.solar, type = "html", omit="District", covariate.labels = c("Treatment", "OAF Seasons"), dep.var.labels = c("Maize acres", "Beans", "Stove", "Solar")) 
+stargazer(acre.bean, acre.stove, acre.solar, type = "html", omit="District", covariate.labels = c("Treatment", "OAF Seasons"), dep.var.labels = c("Beans", "Stove", "Solar")) 
 
 ```
 
@@ -727,7 +702,7 @@ This transformation yields normal looking residuals with an R2 against a normal 
 We can now examine the regression output:
 
 ```{r, maizout, results='asis'}
-stargazer(acre.maizchoice, type = "html", omit="District", covariate.labels = c("Treatment", "OAF Seasons"))
+stargazer(acre.maizchoice, type = "html", covariate.labels = c("Treatment", "OAF Seasons"))
 x<- round(wilcox.test(subset(supdat, TC=="Control")$TotalEnrolledSeasons, subset(supdat, TC=="Treated")$TotalEnrolledSeasons ,paired=FALSE, correct=TRUE)$p.value,3)
 
 ```
@@ -751,15 +726,16 @@ For the total credit observable, we again find that treatment has no significant
 ```{r, sitesize, results='asis'}
 msite$TC <- supdat$TC
 msite$transNclients <- sqrt(msite$Nsites)
-nclients <-lmrob(formula = transNclients ~ TotalEnrolledSeasons + TC + District, data=msite)
+nclients <-lmrob(formula = transNclients ~ TC + TotalEnrolledSeasons  + District, data=msite)
 stargazer(nclients, type = "html", omit="District", covariate.labels = c("Treatment", "OAF Seasons"))
 qn=qqnorm(stdres(nclients), plot.it=FALSE)
 x1 <- cor(qn$x,qn$y)
+x1 <- round(x1,3)
 
 
 ```
 
-Once again, non-normal residuals means we need to transform our Y-variable. In this case a square root transform yields an R-squared of `r, round(x1,3)` against a normal distribution. Examination of the coefficients reveals no significant relationships were detected. 
+Once again, non-normal residuals means we need to transform our Y-variable. In this case a square root transform yields an R-squared of `r x1` against a normal distribution. Examination of the coefficients reveals no significant relationships were detected. 
 
 
 
@@ -839,8 +815,8 @@ for(ix in tes){
   plot(tempreg,which = c(1:4), caption=ix, main=ix )    }  
 ```
 ##Robust regression coefficients for transformed maize adoption when only treatment is considered as a factor
-```{r, robTC}
-stargazer(acre.maiz, type="text")
+```{r, robTC, results='asis'}
+stargazer(acre.maiz, type="html")
 ```
 
 ##robust regression diagnostic plots for coefficient tables in main body
